@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum SubscriptionTier {
+  FREE
+  PREMIUM
+}
+
+enum MatchType {
+  MANUAL
+  AUTO
+}
+
+// ─── Core Models ─────────────────────────────────────────────────────────────
+
+model User {
+  id               String           @id @default(uuid())
+  supabaseId       String           @unique
+  email            String           @unique
+  name             String?
+  role             Role             @default(STUDENT)
+  subscriptionTier SubscriptionTier @default(FREE)
+  aiTokensUsed     Int              @default(0)
+  aiTokensLimit    Int              @default(50)
+  createdAt        DateTime         @default(now())
+
+  assessments      Assessment[]
+  chatSessions     ChatSession[]
+  mentorAssignment MentorAssignment?
+  payments         Payment[]
+}
+
+model Assessment {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  createdAt      DateTime     @default(now())
+  education      String?
+  stream         String?
+  skills         String[]
+  interests      String[]
+  personality    String?
+  goals          String?
+  recommendation Json?
+  pdfReportUrl   String?
+
+  careerPaths CareerPath[]
+}
+
+model CareerPath {
+  id               String     @id @default(uuid())
+  assessmentId     String
+  assessment       Assessment @relation(fields: [assessmentId], references: [id])
+  title            String
+  description      String
+  steps            Json
+  recommendedExams String[]
+  alternateExams   String[]
+  universities     Json
+  competitionLevel String?
+  futureDemand     String?
+  companies        String[]
+}
+
+// ─── Mentor System ────────────────────────────────────────────────────────────
+
+model Mentor {
+  id                  String             @id @default(uuid())
+  name                String
+  fieldSpecialization String[]
+  bio                 String?
+  organization        String?
+  createdAt           DateTime           @default(now())
+
+  assignments MentorAssignment[]
+}
+
+model MentorAssignment {
+  id         String    @id @default(uuid())
+  studentId  String    @unique
+  student    User      @relation(fields: [studentId], references: [id])
+  mentorId   String
+  mentor     Mentor    @relation(fields: [mentorId], references: [id])
+  matchType  MatchType
+  assignedAt DateTime  @default(now())
+}
+
+// ─── Payments ────────────────────────────────────────────────────────────────
+
+model Payment {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  razorpayOrderId String
+  amount          Int
+  currency        String   @default("INR")
+  status          String
+  createdAt       DateTime @default(now())
+}
+
+// ─── AI Chatbot ───────────────────────────────────────────────────────────────
+
+model ChatSession {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id])
+  mode      String
+  createdAt DateTime      @default(now())
+
+  messages ChatMessage[]
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id])
+  role      String
+  content   String
+  createdAt DateTime    @default(now())
+}
