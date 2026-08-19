@@ -1,9 +1,19 @@
 import { AnalysisOutput, AssessmentResult, StudentProfile } from "./types";
 
+export interface TargetCareerData {
+  careerId: string;
+  title: string;
+  category: string;
+  stream?: string;
+  fitScore: number;
+  selectedAt: string;
+}
+
 const KEYS = {
   PROFILE: "ai_career_profile",
   ASSESSMENT: "ai_career_assessment_result",
   ANALYSIS_OUTPUT: "ai_career_analysis_output",
+  TARGET_CAREER: "ai_career_target_career",
   COMPLETED_TASKS: "ai_career_completed_tasks",
   XP: "ai_career_xp",
   UNLOCKED_BADGES: "ai_career_badges",
@@ -55,6 +65,24 @@ class StorageService {
   getAnalysisOutput(): AnalysisOutput | null {
     if (!this.isBrowser()) return null;
     const raw = localStorage.getItem(KEYS.ANALYSIS_OUTPUT);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  setTargetCareer(target: TargetCareerData): void {
+    if (!this.isBrowser()) return;
+    localStorage.setItem(KEYS.TARGET_CAREER, JSON.stringify(target));
+    // Dispatch custom event so listening components update immediately
+    window.dispatchEvent(new CustomEvent("target-career-updated", { detail: target }));
+  }
+
+  getTargetCareer(): TargetCareerData | null {
+    if (!this.isBrowser()) return null;
+    const raw = localStorage.getItem(KEYS.TARGET_CAREER);
     if (!raw) return null;
     try {
       return JSON.parse(raw);
