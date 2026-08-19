@@ -4,33 +4,33 @@ import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
-// Parse DATABASE_URL / DIRECT_URL or fallback to explicit pool parameters
-function getPool() {
-  const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
-  if (!dbUrl) {
-    throw new Error("DATABASE_URL or DIRECT_URL is required");
-  }
+function createPrismaClient() {
+  const dbUrl =
+    process.env.DIRECT_URL ||
+    process.env.DATABASE_URL ||
+    "postgresql://postgres:postgres@localhost:5432/postgres";
 
   // Remove problematic query parameters like sslmode=require that force verify-full in pg
   const cleanUrl = dbUrl.split("?")[0];
+  const isLocal = cleanUrl.includes("localhost") || cleanUrl.includes("127.0.0.1");
 
-  return new Pool({
+  const pool = new Pool({
     connectionString: cleanUrl,
-    ssl: { rejectUnauthorized: false },
+    ssl: isLocal ? false : { rejectUnauthorized: false },
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
   });
-}
 
-const pool = getPool();
-const adapter = new PrismaPg(pool);
+  const adapter = new PrismaPg(pool);
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+  return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
   });
+}
+
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
