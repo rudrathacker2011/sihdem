@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import RobotAssistant, { type RobotState } from "@/components/robot/RobotAssistant";
 
+import { AppSidebar } from "@/components/layout/AppSidebar";
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -58,23 +60,19 @@ export default function ChatPage() {
         const reader = res.body?.getReader();
         const decoder = new TextDecoder();
         let assistantText = "";
-        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-        while (reader) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value);
-          for (const line of chunk.split("\n")) {
-            if (line.startsWith("0:")) {
-              try {
-                assistantText += JSON.parse(line.slice(2));
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  updated[updated.length - 1] = { role: "assistant", content: assistantText };
-                  return updated;
-                });
-              } catch {}
-            }
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            assistantText += decoder.decode(value, { stream: true });
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last && last.role === "assistant") {
+                return [...prev.slice(0, -1), { role: "assistant", content: assistantText }];
+              }
+              return [...prev, { role: "assistant", content: assistantText }];
+            });
           }
         }
       } else {
@@ -90,36 +88,38 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-background">
-      {/* Sidebar */}
-      <div className="hidden w-64 flex-col border-r border-border p-4 md:flex">
+    <div className="flex h-[calc(100vh-64px)] bg-background text-foreground overflow-hidden">
+      <AppSidebar />
+
+      {/* Chat sidebar on md+ */}
+      <div className="hidden w-64 flex-col border-r border-border/80 p-4 xl:flex shrink-0 bg-card/40">
         <div className="flex flex-col items-center gap-4 py-4">
           <RobotAssistant state={robotState} size={100} />
           <div className="text-center">
-            <p className="text-sm font-semibold">AI Counsellor</p>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            <p className="text-sm font-bold text-foreground">AI Counsellor</p>
+            <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
               mode === "personalized"
-                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                : "bg-primary/15 text-primary"
             }`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${mode === "personalized" ? "bg-green-500" : "bg-blue-500"}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${mode === "personalized" ? "bg-emerald-500" : "bg-primary"}`} />
               {mode === "personalized" ? "Personalized" : "General"} Mode
             </span>
           </div>
         </div>
 
         <div className="mt-4 space-y-2 text-xs text-muted-foreground">
-          <p className="font-semibold uppercase tracking-wide">Quick questions</p>
+          <p className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground">Quick Prompts</p>
           {[
             "What careers suit a PCM student?",
-            "How to prepare for JEE?",
-            "What is CAT exam?",
-            "Best colleges for CS in India?",
+            "How to prepare for JEE Main & Adv?",
+            "What is CAT and IIM eligibility?",
+            "Best colleges for Computer Science in India?",
           ].map((q) => (
             <button
               key={q}
               onClick={() => setInput(q)}
-              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-muted hover:text-foreground"
+              className="block w-full rounded-xl p-2.5 text-left text-xs font-medium border border-border/60 bg-card/60 hover:bg-accent hover:text-foreground transition"
             >
               {q}
             </button>
@@ -128,7 +128,7 @@ export default function ChatPage() {
       </div>
 
       {/* Chat area */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col min-w-0 pb-16 lg:pb-0">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="flex items-center gap-3">

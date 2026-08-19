@@ -36,7 +36,7 @@ export default function CursorAura() {
     <div
       ref={outerRef}
       aria-hidden
-      className="pointer-events-none fixed z-[9998] -translate-x-1/2 -translate-y-1/2"
+      className="hidden md:block pointer-events-none fixed z-[9998] -translate-x-1/2 -translate-y-1/2"
       style={{ willChange: 'left, top' }}
     >
       {/* Pure ambient light aura around pointer — no solid dot or ring */}
