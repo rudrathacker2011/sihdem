@@ -8,6 +8,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/utils/supabase/server";
 import { getOrCreateDbUser } from "@/lib/auth-sync";
+import { getLocalAiResponse } from "@/lib/ai/localAiEngine";
 
 async function buildSystemPrompt(userId: string): Promise<string> {
   const user = await prisma.user.findUnique({
@@ -73,38 +74,27 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Check if API key is available
+    // Check if API key is available or fallback to local AI engine
     if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      // Return a mock stream response
-      const mockResponse = `Hello! I'm your AI career counsellor. I'm currently in **demo mode** (API key not yet configured).
-
-Here's what I can help you with once fully activated:
-- Career path guidance for Indian students
-- Entrance exam preparation (JEE, NEET, CAT, GATE, etc.)
-- College selection and admission guidance
-- Skill development roadmaps
-- Job market insights for India
-
-${mode === "general" ? "Complete your **AI Assessment** for personalized recommendations!" : "Based on your assessment results, I can provide personalized guidance!"}
-
-*Please add your Gemini API key to activate full AI capabilities.*`;
+      const lastMsg = messages[messages.length - 1];
+      const localResponse = getLocalAiResponse(lastMsg?.content ?? "", { mode });
 
       // Save messages to DB
-      const lastMsg = messages[messages.length - 1];
       await prisma.chatMessage.create({
         data: { sessionId: session.id, role: "user", content: lastMsg.content },
       });
       await prisma.chatMessage.create({
-        data: { sessionId: session.id, role: "assistant", content: mockResponse },
+        data: { sessionId: session.id, role: "assistant", content: localResponse },
       });
 
       return NextResponse.json({
         role: "assistant",
-        content: mockResponse,
+        content: localResponse,
         sessionId: session.id,
         mode,
       });
     }
+
 
     // Real streaming response
     const result = streamText({

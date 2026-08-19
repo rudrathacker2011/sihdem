@@ -9,12 +9,15 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // Check if Razorpay is configured
+    // If Razorpay is not configured, support seamless Demo/Test Mode
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      return NextResponse.json(
-        { error: "Payment gateway not configured. Add Razorpay test keys to .env.local." },
-        { status: 503 }
-      );
+      return NextResponse.json({
+        isDemo: true,
+        orderId: `demo_order_${user.id}_${Date.now()}`,
+        amount: 99900,
+        currency: "INR",
+        message: "Running in Demo Simulation Mode",
+      });
     }
 
     const razorpay = getRazorpay();
@@ -30,7 +33,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ orderId: order.id, amount: order.amount, currency: order.currency });
+    return NextResponse.json({
+      isDemo: false,
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+    });
   } catch (error: any) {
     console.error("[payments/create-order]", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

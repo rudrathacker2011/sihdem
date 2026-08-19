@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/utils/supabase/server";
 
-// POST /api/payments/verify — HMAC signature verification (server-side only)
+// POST /api/payments/verify — HMAC signature verification & Demo Mode handler
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -11,7 +11,36 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json();
-    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = body;
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature, isDemo } = body;
+
+    // Handle Demo Mode verification
+    if (isDemo || razorpayOrderId?.startsWith("demo_order_")) {
+      // Get or create DB user
+      let dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } });
+      if (!dbUser) {
+        dbUser = await prisma.user.create({
+          data: { supabaseId: user.id, email: user.email! },
+        });
+      }
+
+      // Record simulated payment and upgrade
+      await prisma.payment.create({
+        data: {
+          userId: dbUser.id,
+          razorpayOrderId: razorpayOrderId || `demo_${Date.now()}`,
+          amount: 99900,
+          currency: "INR",
+          status: "paid",
+        },
+      });
+
+      await prisma.user.update({
+        where: { id: dbUser.id },
+        data: { subscriptionTier: "PREMIUM" },
+      });
+
+      return NextResponse.json({ success: true, tier: "PREMIUM", isDemo: true });
+    }
 
     if (!process.env.RAZORPAY_KEY_SECRET) {
       return NextResponse.json({ error: "Payment gateway not configured." }, { status: 503 });

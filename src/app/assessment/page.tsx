@@ -1,35 +1,73 @@
-import AssessmentStepper from "@/components/assessment/AssessmentStepper";
-import type { Metadata } from "next";
+"use client";
 
-export const metadata: Metadata = {
-  title: "AI Assessment — AI Career Counsellor",
-  description: "Complete your personalized AI career assessment tailored for Indian students.",
-};
+import React, { useState } from "react";
+import { AppSidebar } from "@/components/layout/AppSidebar";
+import { MultilingualVoiceAssessment } from "@/components/assessment/MultilingualVoiceAssessment";
+import AssessmentStepper from "@/components/assessment/AssessmentStepper";
+import { Compass, Languages, Bot } from "lucide-react";
 
 export default function AssessmentPage() {
+  const [assessmentMode, setAssessmentMode] = useState<"scenario" | "stepper">("scenario");
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-3xl px-4 py-10 md:py-16">
-        {/* Hero */}
-        <div className="mb-10 text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-3xl">
-            🧠
+    <div className="flex min-h-[calc(100vh-64px)] bg-background text-foreground">
+      <AppSidebar />
+
+      <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 min-w-0">
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-border/80 bg-card p-6 shadow-xs">
+          <div>
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-0.5 text-xs font-semibold text-primary mb-2">
+              <Compass className="h-3.5 w-3.5" />
+              <span>Discovery Assessment</span>
+            </div>
+            <h1 className="font-heading text-2xl md:text-3xl font-bold text-foreground">
+              Career Alignment Assessment
+            </h1>
+            <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+              Parent and student-friendly scenarios exploring natural interests, aptitude, and practical study paths.
+            </p>
           </div>
-          <h1 className="font-heading text-3xl font-bold md:text-4xl">AI Career Assessment</h1>
-          <p className="mt-3 text-muted-foreground">
-            Answer a few questions and our AI will generate a personalized career roadmap
-            tailored to the Indian education and job market.
-          </p>
-          <div className="mt-4 flex justify-center gap-4 text-sm text-muted-foreground">
-            <span>✅ Takes ~3 minutes</span>
-            <span>✅ Powered by Gemini AI</span>
-            <span>✅ India-specific guidance</span>
+
+          {/* Assessment Mode Switcher */}
+          <div className="flex items-center rounded-xl border border-border bg-background p-1 self-start sm:self-auto">
+            <button
+              onClick={() => setAssessmentMode("scenario")}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                assessmentMode === "scenario"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Languages className="h-3.5 w-3.5" />
+              <span>Situational (EN/GU/HI)</span>
+            </button>
+
+            <button
+              onClick={() => setAssessmentMode("stepper")}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                assessmentMode === "stepper"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Bot className="h-3.5 w-3.5" />
+              <span>AI Stepper</span>
+            </button>
           </div>
         </div>
 
-        {/* Stepper */}
-        <AssessmentStepper />
-      </div>
+        {/* Assessment Body */}
+        <div className="max-w-3xl mx-auto">
+          {assessmentMode === "scenario" ? (
+            <MultilingualVoiceAssessment />
+          ) : (
+            <div className="rounded-2xl border border-border/80 bg-card p-6 md:p-8 shadow-xs">
+              <AssessmentStepper />
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
