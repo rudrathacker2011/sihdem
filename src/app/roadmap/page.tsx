@@ -98,7 +98,7 @@ export default function RoadmapPage() {
     <div className="flex min-h-[calc(100vh-64px)] bg-background text-foreground">
       <AppSidebar />
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 min-w-0">
+      <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-8 space-y-6 min-w-0 pb-36 lg:pb-12">
         {/* Header */}
         <motion.div
           className="rounded-2xl border border-border/80 bg-card p-6 md:p-8 shadow-xs"

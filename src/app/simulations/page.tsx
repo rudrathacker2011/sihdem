@@ -11,7 +11,7 @@ export default function SimulationsPage() {
     <div className="flex min-h-[calc(100vh-64px)] bg-background text-foreground">
       <AppSidebar />
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 min-w-0">
+      <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-8 space-y-6 min-w-0 pb-36 lg:pb-12">
         {/* Top Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-border/80 bg-card p-6 shadow-xs">
           <div>
