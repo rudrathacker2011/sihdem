@@ -7,11 +7,10 @@ const rawKey =
   process.env.GEMINI_API_KEY ||
   "";
 
-// Valid Google AI Studio Gemini keys start with "AIzaSy" and are typically ~39 chars.
+// Valid Google AI Studio Gemini keys (both AIzaSy... and newer AQ.Ab8... auth formats)
 export const hasValidGeminiKey = Boolean(
   rawKey &&
-  rawKey.trim().length > 20 &&
-  !rawKey.startsWith("AQ.") &&
+  rawKey.trim().length > 15 &&
   rawKey !== "your_gemini_api_key_here"
 );
 
