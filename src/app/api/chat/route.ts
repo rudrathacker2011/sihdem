@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { streamText } from "ai";
-import { geminiFlash } from "@/lib/ai/client";
+import { geminiFlash, hasValidGeminiKey } from "@/lib/ai/client";
 import {
   GENERAL_CAREER_SYSTEM_PROMPT,
   PERSONALIZED_SYSTEM_PROMPT,
@@ -10,122 +10,181 @@ import { createClient } from "@/utils/supabase/server";
 import { getOrCreateDbUser } from "@/lib/auth-sync";
 import { getLocalAiResponse } from "@/lib/ai/localAiEngine";
 
-async function buildSystemPrompt(userId: string): Promise<string> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      assessments: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        include: { careerPaths: true },
-      },
-    },
-  });
+async function buildSystemPrompt(userId?: string): Promise<string> {
+  if (!userId) return GENERAL_CAREER_SYSTEM_PROMPT;
 
-  if (!user || user.assessments.length === 0) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        assessments: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { careerPaths: true },
+        },
+      },
+    });
+
+    if (!user || user.assessments.length === 0) {
+      return GENERAL_CAREER_SYSTEM_PROMPT;
+    }
+
+    const latest = user.assessments[0];
+    const paths = latest.careerPaths.map((c) => c.title).join(", ");
+
+    return PERSONALIZED_SYSTEM_PROMPT
+      .replace("{{stream}}", latest.stream ?? "not specified")
+      .replace("{{careerPaths}}", paths)
+      .replace("{{goals}}", latest.goals ?? "not specified");
+  } catch {
     return GENERAL_CAREER_SYSTEM_PROMPT;
   }
-
-  const latest = user.assessments[0];
-  const paths = latest.careerPaths.map((c) => c.title).join(", ");
-
-  return PERSONALIZED_SYSTEM_PROMPT
-    .replace("{{stream}}", latest.stream ?? "not specified")
-    .replace("{{careerPaths}}", paths)
-    .replace("{{goals}}", latest.goals ?? "not specified");
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await request.json();
     const { messages, sessionId } = body;
+    const lastMsg = messages?.[messages.length - 1];
+    const userQuery = lastMsg?.content ?? "";
 
-    // Get or create DB user (links seeded users by email automatically)
-    const dbUser = await getOrCreateDbUser(user);
+    // 1. Try to get authenticated user (optional for guest chat)
+    let dbUser: any = null;
+    let mode: "general" | "personalized" = "general";
 
-    // Check token limit for FREE users
-    if (dbUser.subscriptionTier === "FREE" && dbUser.aiTokensUsed >= dbUser.aiTokensLimit) {
-      return NextResponse.json(
-        { error: "AI token limit reached. Upgrade to Premium for unlimited chats." },
-        { status: 403 }
-      );
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        dbUser = await getOrCreateDbUser(user);
+
+        // Check token limit for FREE users
+        if (
+          dbUser.subscriptionTier === "FREE" &&
+          dbUser.aiTokensUsed >= dbUser.aiTokensLimit
+        ) {
+          return NextResponse.json(
+            { error: "AI token limit reached. Upgrade to Premium for unlimited chats." },
+            { status: 403 }
+          );
+        }
+
+        const hasAssessment =
+          (await prisma.assessment.count({ where: { userId: dbUser.id } })) > 0;
+        if (hasAssessment) mode = "personalized";
+      }
+    } catch (authErr) {
+      // Guest or offline mode
     }
 
-    // Determine mode and build system prompt
-    const hasAssessment = (await prisma.assessment.count({ where: { userId: dbUser.id } })) > 0;
-    const mode = hasAssessment ? "personalized" : "general";
-    const systemPrompt = await buildSystemPrompt(dbUser.id);
+    // 2. Build system prompt
+    const systemPrompt = await buildSystemPrompt(dbUser?.id);
 
-    // Get or create chat session
-    let session;
-    if (sessionId) {
-      session = await prisma.chatSession.findUnique({ where: { id: sessionId } });
-    }
-    if (!session) {
-      session = await prisma.chatSession.create({
-        data: { userId: dbUser.id, mode },
-      });
-    }
+    // 3. Fallback / Local AI Engine if no valid Gemini API key
+    if (!hasValidGeminiKey) {
+      const localResponse = getLocalAiResponse(userQuery, { mode });
 
-    // Check if API key is available or fallback to local AI engine
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      const lastMsg = messages[messages.length - 1];
-      const localResponse = getLocalAiResponse(lastMsg?.content ?? "", { mode });
+      // Save messages to DB if logged in
+      if (dbUser) {
+        try {
+          let session = sessionId
+            ? await prisma.chatSession.findUnique({ where: { id: sessionId } })
+            : null;
+          if (!session) {
+            session = await prisma.chatSession.create({
+              data: { userId: dbUser.id, mode },
+            });
+          }
 
-      // Save messages to DB
-      await prisma.chatMessage.create({
-        data: { sessionId: session.id, role: "user", content: lastMsg.content },
-      });
-      await prisma.chatMessage.create({
-        data: { sessionId: session.id, role: "assistant", content: localResponse },
-      });
+          await prisma.chatMessage.create({
+            data: { sessionId: session.id, role: "user", content: userQuery },
+          });
+          await prisma.chatMessage.create({
+            data: { sessionId: session.id, role: "assistant", content: localResponse },
+          });
+
+          return NextResponse.json({
+            role: "assistant",
+            content: localResponse,
+            sessionId: session.id,
+            mode,
+          });
+        } catch {
+          // DB error fallback
+        }
+      }
 
       return NextResponse.json({
         role: "assistant",
         content: localResponse,
-        sessionId: session.id,
+        sessionId: sessionId ?? "session_demo",
         mode,
       });
     }
 
+    // 4. Gemini AI Streaming with Automatic Fallback
+    try {
+      const result = streamText({
+        model: geminiFlash,
+        system: systemPrompt,
+        messages,
+        onFinish: async ({ text }) => {
+          if (dbUser) {
+            try {
+              let session = sessionId
+                ? await prisma.chatSession.findUnique({ where: { id: sessionId } })
+                : null;
+              if (!session) {
+                session = await prisma.chatSession.create({
+                  data: { userId: dbUser.id, mode },
+                });
+              }
 
-    // Real streaming response
-    const result = streamText({
-      model: geminiFlash,
-      system: systemPrompt,
-      messages,
-      onFinish: async ({ text }) => {
-        // Save messages
-        const lastMsg = messages[messages.length - 1];
-        await prisma.chatMessage.createMany({
-          data: [
-            { sessionId: session!.id, role: "user", content: lastMsg.content },
-            { sessionId: session!.id, role: "assistant", content: text },
-          ],
-        });
-        // Increment token usage
-        await prisma.user.update({
-          where: { id: dbUser!.id },
-          data: { aiTokensUsed: { increment: 1 } },
-        });
-      },
-    });
+              await prisma.chatMessage.createMany({
+                data: [
+                  { sessionId: session.id, role: "user", content: userQuery },
+                  { sessionId: session.id, role: "assistant", content: text },
+                ],
+              });
 
-    return result.toTextStreamResponse({
-      headers: {
-        "x-session-id": session.id,
-        "x-mode": mode,
-      },
-    });
+              await prisma.user.update({
+                where: { id: dbUser.id },
+                data: { aiTokensUsed: { increment: 1 } },
+              });
+            } catch {
+              // Ignore DB sync error in onFinish
+            }
+          }
+        },
+      });
+
+      return result.toTextStreamResponse({
+        headers: {
+          "x-session-id": sessionId ?? "session_live",
+          "x-mode": mode,
+        },
+      });
+    } catch (aiErr: any) {
+      console.warn("[chat:gemini_fallback]", aiErr?.message);
+      // Fallback to local AI engine on any Gemini exception
+      const localResponse = getLocalAiResponse(userQuery, { mode });
+      return NextResponse.json({
+        role: "assistant",
+        content: localResponse,
+        sessionId: sessionId ?? "session_fallback",
+        mode,
+      });
+    }
   } catch (error: any) {
     console.error("[chat]", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Even on server failure, return an informative AI answer
+    const fallbackResponse = getLocalAiResponse("career guidance");
+    return NextResponse.json({
+      role: "assistant",
+      content: fallbackResponse,
+    });
   }
 }

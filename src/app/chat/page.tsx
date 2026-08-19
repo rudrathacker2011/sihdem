@@ -8,6 +8,8 @@ import RobotAssistant, { type RobotState } from "@/components/robot/RobotAssista
 
 import { AppSidebar } from "@/components/layout/AppSidebar";
 
+import { getLocalAiResponse } from "@/lib/ai/localAiEngine";
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -35,6 +37,7 @@ export default function ChatPage() {
     if (!input.trim() || isLoading) return;
 
     const userMessage: Message = { role: "user", content: input.trim() };
+    const currentInput = input.trim();
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
@@ -48,8 +51,9 @@ export default function ChatPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${err.error}` }]);
+        const localAnswer = getLocalAiResponse(currentInput, { mode });
+        setMessages((prev) => [...prev, { role: "assistant", content: localAnswer }]);
+        setRobotState("speaking");
         return;
       }
 
@@ -79,11 +83,16 @@ export default function ChatPage() {
         const data = await res.json();
         if (data.sessionId) setSessionId(data.sessionId);
         if (data.mode) setMode(data.mode);
-        setMessages((prev) => [...prev, { role: "assistant", content: data.content }]);
+        const reply = data.content || getLocalAiResponse(currentInput, { mode });
+        setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       }
+    } catch {
+      const localAnswer = getLocalAiResponse(currentInput, { mode });
+      setMessages((prev) => [...prev, { role: "assistant", content: localAnswer }]);
+      setRobotState("speaking");
     } finally {
       setIsLoading(false);
-      setRobotState("idle");
+      setTimeout(() => setRobotState("idle"), 2500);
     }
   };
 

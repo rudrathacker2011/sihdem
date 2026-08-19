@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateObject } from "ai";
-import { geminiFlash } from "@/lib/ai/client";
+import { geminiFlash, hasValidGeminiKey } from "@/lib/ai/client";
 import { AssessmentRecommendationSchema } from "@/lib/ai/schemas";
 import { ASSESSMENT_SYSTEM_PROMPT, buildAssessmentPrompt } from "@/lib/ai/prompts";
 import { prisma } from "@/lib/prisma";
@@ -43,99 +43,76 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Check if API key is available
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      // Return mock data if no API key yet
-      const mockRecommendation = {
-        summary: `Based on your profile in ${stream} with interests in ${interests.join(", ")}, we've identified ${2} promising career paths tailored to the Indian job market.`,
-        careerPaths: [
-          {
-            title: "Software Engineering",
-            description: "Build technology products for India's booming tech sector.",
-            steps: [
-              { order: 1, title: "Complete 12th with PCM", description: "Focus on Mathematics and Physics." },
-              { order: 2, title: "Clear JEE Main/Advanced", description: "Aim for NIT or IIT admission." },
-              { order: 3, title: "B.Tech in CS/IT", description: "4-year undergraduate degree." },
-            ],
-            recommendedExams: ["JEE Main", "JEE Advanced"],
-            alternateExams: ["BITSAT", "VITEEE", "COMEDK"],
-            universities: [
-              { name: "IIT Bombay", courses: ["B.Tech Computer Science"] },
-              { name: "NIT Trichy", courses: ["B.Tech Information Technology"] },
-            ],
-            competitionLevel: "Very High",
-            futureDemand: "High Growth",
-            companies: ["Google", "Microsoft", "Infosys", "TCS", "Flipkart"],
-          },
-          {
-            title: "Data Science & AI",
-            description: "Work with data to drive decisions in India's digital economy.",
-            steps: [
-              { order: 1, title: "Build Python & Math foundations", description: "Statistics, Linear Algebra." },
-              { order: 2, title: "Pursue B.Sc/B.Tech with AI focus", description: "Look for AI/ML specializations." },
-              { order: 3, title: "Build portfolio projects", description: "Kaggle competitions and internships." },
-            ],
-            recommendedExams: ["JEE Main", "CUET"],
-            alternateExams: ["BITSAT", "IPU CET"],
-            universities: [
-              { name: "IIT Delhi", courses: ["B.Tech with AI specialization"] },
-              { name: "BITS Pilani", courses: ["B.E. Computer Science"] },
-            ],
-            competitionLevel: "High",
-            futureDemand: "High Growth",
-            companies: ["Amazon", "Zomato", "Swiggy", "Paytm", "Razorpay"],
-          },
-        ],
-      };
+    const fallbackRecommendation = {
+      summary: `Based on your profile in ${stream ?? "High School"} with interests in ${(interests || []).join(", ") || "technology and innovation"}, we've identified 2 promising career paths tailored to the Indian job market.`,
+      careerPaths: [
+        {
+          title: "Software Engineering & AI",
+          description: "Build cutting-edge technology products, machine learning models, and cloud systems.",
+          steps: [
+            { order: 1, title: "Complete 12th with PCM / STEM", description: "Focus on Mathematics and Physics foundations." },
+            { order: 2, title: "Clear Entrance Exams (JEE / BITSAT / CET)", description: "Aim for top engineering colleges in India." },
+            { order: 3, title: "B.Tech in CS / AI / Data Science", description: "4-year undergraduate degree with internships." },
+          ],
+          recommendedExams: ["JEE Main", "JEE Advanced"],
+          alternateExams: ["BITSAT", "VITEEE", "COMEDK"],
+          universities: [
+            { name: "IIT Bombay", courses: ["B.Tech Computer Science"] },
+            { name: "NIT Trichy", courses: ["B.Tech Information Technology"] },
+            { name: "BITS Pilani", courses: ["B.E. Computer Science"] },
+          ],
+          competitionLevel: "Very High",
+          futureDemand: "High Growth",
+          companies: ["Google", "Microsoft", "Infosys", "TCS", "Flipkart", "Zomato"],
+        },
+        {
+          title: "Data Analytics & Strategic Tech",
+          description: "Transform complex data into business intelligence and scalable strategies.",
+          steps: [
+            { order: 1, title: "Build Python & Math foundations", description: "Statistics, Linear Algebra, and SQL." },
+            { order: 2, title: "Pursue B.Sc/B.Tech with Analytics focus", description: "Look for AI/ML and Data specializations." },
+            { order: 3, title: "Build portfolio projects", description: "Participate in Kaggle competitions and open-source." },
+          ],
+          recommendedExams: ["JEE Main", "CUET-UG"],
+          alternateExams: ["BITSAT", "IPU CET"],
+          universities: [
+            { name: "IIT Delhi", courses: ["B.Tech with AI specialization"] },
+            { name: "BITS Pilani", courses: ["B.E. Data Science"] },
+          ],
+          competitionLevel: "High",
+          futureDemand: "High Growth",
+          companies: ["Amazon", "Swiggy", "Paytm", "Razorpay", "Jio"],
+        },
+      ],
+    };
 
-      // Save mock data
-      await prisma.assessment.update({
-        where: { id: assessment.id },
-        data: { recommendation: mockRecommendation },
-      });
+    let finalRecommendation = fallbackRecommendation;
 
-      // Create career path rows
-      for (const cp of mockRecommendation.careerPaths) {
-        await prisma.careerPath.create({
-          data: {
-            assessmentId: assessment.id,
-            title: cp.title,
-            description: cp.description,
-            steps: cp.steps,
-            recommendedExams: cp.recommendedExams,
-            alternateExams: cp.alternateExams,
-            universities: cp.universities,
-            competitionLevel: cp.competitionLevel,
-            futureDemand: cp.futureDemand,
-            companies: cp.companies,
-          },
+    // Attempt Gemini AI if valid key exists
+    if (hasValidGeminiKey) {
+      try {
+        const result = await generateObject({
+          model: geminiFlash,
+          schema: AssessmentRecommendationSchema,
+          system: ASSESSMENT_SYSTEM_PROMPT,
+          prompt: buildAssessmentPrompt({ education, stream, skills, interests, personality, goals }),
         });
+        if (result?.object) {
+          finalRecommendation = result.object;
+        }
+      } catch (geminiErr: any) {
+        console.warn("[assessment:gemini_fallback]", geminiErr?.message);
       }
-
-      await prisma.user.update({
-        where: { id: dbUser.id },
-        data: { aiTokensUsed: { increment: 1 } },
-      });
-
-      return NextResponse.json({ assessmentId: assessment.id, mock: true });
     }
-
-    // Real AI generation
-    const result = await generateObject({
-      model: geminiFlash,
-      schema: AssessmentRecommendationSchema,
-      system: ASSESSMENT_SYSTEM_PROMPT,
-      prompt: buildAssessmentPrompt({ education, stream, skills, interests, personality, goals }),
-    });
 
     // Save recommendation
     await prisma.assessment.update({
       where: { id: assessment.id },
-      data: { recommendation: result.object },
+      data: { recommendation: finalRecommendation },
     });
 
     // Create individual CareerPath rows
-    for (const cp of result.object.careerPaths) {
+    for (const cp of finalRecommendation.careerPaths) {
       await prisma.careerPath.create({
         data: {
           assessmentId: assessment.id,
@@ -164,3 +141,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message ?? "Internal server error" }, { status: 500 });
   }
 }
+

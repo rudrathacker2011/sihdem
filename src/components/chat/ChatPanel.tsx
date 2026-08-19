@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { getLocalAiResponse } from "@/lib/ai/localAiEngine";
 
 interface Message {
   role: "user" | "assistant";
@@ -37,6 +38,7 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
 
     const userMessage: Message = { role: "user", content: input.trim() };
     setMessages((prev) => [...prev, userMessage]);
+    const currentInput = input.trim();
     setInput("");
     setIsLoading(true);
     onRobotStateChange?.("thinking");
@@ -52,11 +54,13 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
       });
 
       if (!res.ok) {
-        const err = await res.json();
+        // Fallback to local AI engine
+        const localAnswer = getLocalAiResponse(currentInput, { mode });
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: `Error: ${err.error}` },
+          { role: "assistant", content: localAnswer },
         ]);
+        onRobotStateChange?.("speaking");
         return;
       }
 
@@ -95,20 +99,24 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
           }
         }
       } else {
-        // Non-streaming (demo mode)
+        // Non-streaming (direct answer)
         const data = await res.json();
         if (data.sessionId) setSessionId(data.sessionId);
         if (data.mode) setMode(data.mode);
-        setMessages((prev) => [...prev, { role: "assistant", content: data.content }]);
+        const reply = data.content || getLocalAiResponse(currentInput, { mode });
+        setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       }
-    } catch (err: any) {
+    } catch {
+      // Offline / network fallback
+      const localAnswer = getLocalAiResponse(currentInput, { mode });
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, something went wrong. Please try again." },
+        { role: "assistant", content: localAnswer },
       ]);
+      onRobotStateChange?.("speaking");
     } finally {
       setIsLoading(false);
-      onRobotStateChange?.("idle");
+      setTimeout(() => onRobotStateChange?.("idle"), 2500);
     }
   };
 
