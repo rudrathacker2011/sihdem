@@ -53,7 +53,7 @@ function StatTile({
 }) {
   return (
     <motion.div
-      className="glass tap-jiggle rounded-2xl p-4 cursor-pointer border border-border/70 hover:border-primary/40 transition-colors shadow-sm"
+      className="bg-card text-card-foreground rounded-2xl p-4 cursor-pointer border border-border hover:border-primary/50 transition-all shadow-xs hover:shadow-md"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.45 }}
@@ -62,21 +62,21 @@ function StatTile({
     >
       <div className="flex items-start justify-between">
         <div
-          className="flex h-9 w-9 items-center justify-center rounded-xl shadow-inner"
-          style={{ background: `${color}20`, border: `1px solid ${color}40` }}
+          className="flex h-9 w-9 items-center justify-center rounded-xl shadow-xs"
+          style={{ background: `${color}18`, border: `1px solid ${color}35` }}
         >
           <Icon className="h-5 w-5" style={{ color }} />
         </div>
         {trend && (
-          <span className="flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
+          <span className="flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
             <TrendingUp className="h-2.5 w-2.5" />
             {trend}
           </span>
         )}
       </div>
-      <p className="mt-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-3 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="mt-0.5 font-heading text-xl sm:text-2xl font-black text-foreground tracking-tight">{value}</p>
-      {sub && <p className="mt-1 text-[10px] sm:text-[11px] font-medium text-muted-foreground/90 truncate">{sub}</p>}
+      {sub && <p className="mt-1 text-[10px] sm:text-[11px] font-medium text-muted-foreground truncate">{sub}</p>}
     </motion.div>
   );
 }
@@ -107,13 +107,13 @@ function ActionCard({
     >
       <Link href={href}>
         <div
-          className="group glass card-3d rounded-2xl p-5 cursor-pointer transition-all border border-border/70 hover:border-primary/40 shadow-sm h-full flex flex-col justify-between"
+          className="group bg-card text-card-foreground card-3d rounded-2xl p-5 cursor-pointer transition-all border border-border hover:border-primary/50 shadow-xs hover:shadow-md h-full flex flex-col justify-between"
           style={{ borderLeft: `3.5px solid ${accent}` }}
         >
           <div>
             <div
-              className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl transition-transform group-hover:scale-110 shadow-inner"
-              style={{ background: `${accent}20`, border: `1px solid ${accent}40` }}
+              className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl transition-transform group-hover:scale-110 shadow-xs"
+              style={{ background: `${accent}18`, border: `1px solid ${accent}35` }}
             >
               <Icon className="h-5 w-5" style={{ color: accent }} />
             </div>
@@ -416,10 +416,10 @@ export default function DashboardPage() {
                   whileTap={{ scale: 0.96 }}
                 >
                   <Link href={item.href}>
-                    <div className="group glass rounded-2xl p-4 cursor-pointer hover:border-primary/40 transition-all border border-border/70 shadow-sm">
+                    <div className="group bg-card text-card-foreground rounded-2xl p-4 cursor-pointer hover:border-primary/50 transition-all border border-border shadow-xs hover:shadow-md">
                       <div
-                        className="mb-2.5 flex h-8.5 w-8.5 items-center justify-center rounded-xl shadow-inner"
-                        style={{ background: `${item.accent}20` }}
+                        className="mb-2.5 flex h-8.5 w-8.5 items-center justify-center rounded-xl shadow-xs"
+                        style={{ background: `${item.accent}18`, border: `1px solid ${item.accent}35` }}
                       >
                         <Icon className="h-4.5 w-4.5" style={{ color: item.accent }} />
                       </div>

@@ -4,16 +4,28 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/providers/AuthProvider';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
-import { LogOut, User, Settings, ChevronDown, Menu } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LogOut, User, Settings, ChevronDown, Menu, Sun, Moon } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import VoiceCommandBar from '@/components/voice/VoiceCommandBar';
 
 export function Header() {
   const { user, loading, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const toggleTheme = () => {
+    const isDark = (resolvedTheme || theme) === 'dark';
+    setTheme(isDark ? 'light' : 'dark');
+  };
 
   const initials = user?.email
     ? user.email.slice(0, 2).toUpperCase()
@@ -26,20 +38,21 @@ export function Header() {
     if (user) {
       e.preventDefault();
       if (pathname === '/dashboard') {
-        router.refresh(); // just refresh data, no navigation
+        router.refresh();
       } else {
         router.push('/dashboard');
       }
     }
-    // if not logged in, let the default Link href="/" handle it
   };
 
   const triggerMobileNav = () => {
     window.dispatchEvent(new CustomEvent('toggle-mobile-nav'));
   };
 
+  const isDarkMode = mounted && (resolvedTheme || theme) === 'dark';
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-card/90 backdrop-blur-xl supports-[backdrop-filter]:bg-card/75 shadow-xs">
       <div className="container mx-auto flex h-16 items-center justify-between px-3 sm:px-4">
 
         {/* ─ Left: Mobile Menu Trigger + Logo ─ */}
@@ -47,7 +60,7 @@ export function Header() {
           {/* Mobile hamburger menu toggle */}
           <button
             onClick={triggerMobileNav}
-            className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-border/60 bg-card/80 text-foreground hover:bg-accent transition"
+            className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-foreground hover:bg-accent transition"
             aria-label="Open mobile menu"
           >
             <Menu className="h-5 w-5" />
@@ -68,42 +81,24 @@ export function Header() {
                 src="/lg.png"
                 width={36}
                 height={36}
-                className="rounded-xl border border-white/10 shadow-md shadow-black/30 w-8 h-8 sm:w-10 sm:h-10"
+                className="rounded-xl border border-border shadow-xs w-8 h-8 sm:w-10 sm:h-10 object-contain"
                 priority
                 alt="Aptivate logo"
-              />
-              {/* Glow halo on hover */}
-              <motion.div
-                className="absolute inset-0 rounded-xl"
-                initial={{ opacity: 0 }}
-                whileHover={{ opacity: 1 }}
-                style={{
-                  boxShadow: '0 0 16px oklch(0.58 0.22 264 / 0.5)',
-                  background: 'oklch(0.58 0.22 264 / 0.08)',
-                }}
               />
             </motion.div>
 
             {/* Brand text */}
             <div className="flex flex-col leading-none">
               <span
-                className="font-display text-base sm:text-lg font-bold tracking-tight"
+                className="font-display text-base sm:text-lg font-bold tracking-tight text-foreground"
                 style={{ fontFamily: 'var(--font-display, var(--font-heading))' }}
               >
                 Career{' '}
-                <span
-                  style={{
-                    background: 'linear-gradient(135deg, oklch(0.68 0.22 264), oklch(0.78 0.18 295))',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    filter: 'drop-shadow(0 0 12px oklch(0.6 0.22 264 / 0.7))',
-                  }}
-                >
+                <span className="text-primary font-black">
                   AI
                 </span>
               </span>
-              <span className="hidden xs:inline text-[9px] sm:text-[10px] font-medium text-muted-foreground tracking-wide">
+              <span className="hidden xs:inline text-[9px] sm:text-[10px] font-semibold text-muted-foreground tracking-wide">
                 Career Navigation
               </span>
             </div>
@@ -112,6 +107,22 @@ export function Header() {
 
         {/* ─ Right side ─ */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Theme Toggle Button */}
+          {mounted && (
+            <button
+              onClick={toggleTheme}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-foreground hover:bg-accent hover:border-primary/40 transition shadow-xs"
+              title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              aria-label="Toggle theme"
+            >
+              {isDarkMode ? (
+                <Sun className="h-4 w-4 text-amber-400" />
+              ) : (
+                <Moon className="h-4 w-4 text-primary" />
+              )}
+            </button>
+          )}
+
           {/* Voice Command Bar in Header */}
           <div className="flex items-center">
             <VoiceCommandBar />
