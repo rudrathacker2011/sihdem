@@ -3,11 +3,12 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { getLocalAiResponse } from "@/lib/ai/localAiEngine";
+import { getLocalAiResponseData } from "@/lib/ai/localAiEngine";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  suggestedQuestions?: string[];
 }
 
 interface ChatPanelProps {
@@ -21,6 +22,12 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
     {
       role: "assistant",
       content: "Hi! 👋 I'm your AI career counsellor. Ask me anything about careers, entrance exams, colleges, or skill development in India!",
+      suggestedQuestions: [
+        "What are the best careers after 12th PCM?",
+        "Which stream should I choose after 10th?",
+        "Top high-paying careers in Commerce & Finance",
+        "How to prepare for JEE & NEET exams?",
+      ],
     },
   ]);
   const [input, setInput] = useState("");
@@ -33,12 +40,12 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+  const sendMessage = async (overrideText?: string) => {
+    const textToSend = (overrideText ?? input).trim();
+    if (!textToSend || isLoading) return;
 
-    const userMessage: Message = { role: "user", content: input.trim() };
+    const userMessage: Message = { role: "user", content: textToSend };
     setMessages((prev) => [...prev, userMessage]);
-    const currentInput = input.trim();
     setInput("");
     setIsLoading(true);
     onRobotStateChange?.("thinking");
@@ -54,11 +61,15 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
       });
 
       if (!res.ok) {
-        // Fallback to local AI engine
-        const localAnswer = getLocalAiResponse(currentInput, { mode });
+        // Fallback to local AI engine with recommendations
+        const localData = getLocalAiResponseData(textToSend, { mode });
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: localAnswer },
+          {
+            role: "assistant",
+            content: localData.content,
+            suggestedQuestions: localData.suggestedQuestions,
+          },
         ]);
         onRobotStateChange?.("speaking");
         return;
@@ -66,7 +77,6 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
 
       onRobotStateChange?.("speaking");
 
-      // Handle both streaming and non-streaming responses
       const contentType = res.headers.get("content-type") ?? "";
 
       if (contentType.includes("text/plain") || contentType.includes("text/event-stream")) {
@@ -91,7 +101,11 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
                 assistantText += text;
                 setMessages((prev) => {
                   const updated = [...prev];
-                  updated[updated.length - 1] = { role: "assistant", content: assistantText };
+                  updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: assistantText,
+                    suggestedQuestions: getLocalAiResponseData(textToSend).suggestedQuestions,
+                  };
                   return updated;
                 });
               } catch {}
@@ -99,19 +113,30 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
           }
         }
       } else {
-        // Non-streaming (direct answer)
+        // Non-streaming / direct answer
         const data = await res.json();
         if (data.sessionId) setSessionId(data.sessionId);
         if (data.mode) setMode(data.mode);
-        const reply = data.content || getLocalAiResponse(currentInput, { mode });
-        setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+        const fallbackData = getLocalAiResponseData(textToSend, { mode });
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.content || fallbackData.content,
+            suggestedQuestions: data.suggestedQuestions || fallbackData.suggestedQuestions,
+          },
+        ]);
       }
     } catch {
       // Offline / network fallback
-      const localAnswer = getLocalAiResponse(currentInput, { mode });
+      const localData = getLocalAiResponseData(textToSend, { mode });
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: localAnswer },
+        {
+          role: "assistant",
+          content: localData.content,
+          suggestedQuestions: localData.suggestedQuestions,
+        },
       ]);
       onRobotStateChange?.("speaking");
     } finally {
@@ -162,21 +187,40 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((msg, i) => (
                 <div
                   key={i}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                    className={`max-w-[90%] rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap ${
                       msg.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-foreground"
+                        ? "bg-primary text-primary-foreground font-medium"
+                        : "bg-muted/80 border border-border/60 text-foreground shadow-xs"
                     }`}
                   >
                     {msg.content}
                   </div>
+
+                  {/* Clickable Recommended Questions */}
+                  {msg.role === "assistant" && msg.suggestedQuestions && msg.suggestedQuestions.length > 0 && (
+                    <div className="mt-2.5 max-w-[95%] flex flex-wrap gap-1.5 pl-1">
+                      <div className="w-full text-[11px] font-semibold text-primary/80 mb-0.5 flex items-center gap-1">
+                        <span>✨ Recommended Follow-ups:</span>
+                      </div>
+                      {msg.suggestedQuestions.map((question, qIdx) => (
+                        <button
+                          key={qIdx}
+                          onClick={() => sendMessage(question)}
+                          disabled={isLoading}
+                          className="rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary hover:text-primary-foreground transition text-left"
+                        >
+                          {question}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -214,10 +258,10 @@ export default function ChatPanel({ isOpen, onClose, onRobotStateChange }: ChatP
                   disabled={isLoading}
                 />
                 <Button
-                  onClick={sendMessage}
+                  onClick={() => sendMessage()}
                   disabled={!input.trim() || isLoading}
                   size="sm"
-                  className="rounded-xl px-4"
+                  className="rounded-xl px-4 font-bold"
                   id="chat-send-btn"
                 >
                   →

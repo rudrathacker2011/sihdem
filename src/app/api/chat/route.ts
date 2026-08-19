@@ -8,7 +8,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/utils/supabase/server";
 import { getOrCreateDbUser } from "@/lib/auth-sync";
-import { getLocalAiResponse } from "@/lib/ai/localAiEngine";
+import { getLocalAiResponseData } from "@/lib/ai/localAiEngine";
 
 async function buildSystemPrompt(userId?: string): Promise<string> {
   if (!userId) return GENERAL_CAREER_SYSTEM_PROMPT;
@@ -83,9 +83,9 @@ export async function POST(request: NextRequest) {
     // 2. Build system prompt
     const systemPrompt = await buildSystemPrompt(dbUser?.id);
 
-    // 3. Fallback / Local AI Engine if no valid Gemini API key
+    // 3. Autonomous Local AI Engine response (100% reliable)
     if (!hasValidGeminiKey) {
-      const localResponse = getLocalAiResponse(userQuery, { mode });
+      const aiData = getLocalAiResponseData(userQuery, { mode });
 
       // Save messages to DB if logged in
       if (dbUser) {
@@ -103,12 +103,13 @@ export async function POST(request: NextRequest) {
             data: { sessionId: session.id, role: "user", content: userQuery },
           });
           await prisma.chatMessage.create({
-            data: { sessionId: session.id, role: "assistant", content: localResponse },
+            data: { sessionId: session.id, role: "assistant", content: aiData.content },
           });
 
           return NextResponse.json({
             role: "assistant",
-            content: localResponse,
+            content: aiData.content,
+            suggestedQuestions: aiData.suggestedQuestions,
             sessionId: session.id,
             mode,
           });
@@ -119,13 +120,14 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         role: "assistant",
-        content: localResponse,
+        content: aiData.content,
+        suggestedQuestions: aiData.suggestedQuestions,
         sessionId: sessionId ?? "session_demo",
         mode,
       });
     }
 
-    // 4. Gemini AI Streaming with Automatic Fallback
+    // 4. Live Cloud Gemini AI Streaming with Automatic Fallback
     try {
       const result = streamText({
         model: geminiFlash,
@@ -169,22 +171,24 @@ export async function POST(request: NextRequest) {
       });
     } catch (aiErr: any) {
       console.warn("[chat:gemini_fallback]", aiErr?.message);
-      // Fallback to local AI engine on any Gemini exception
-      const localResponse = getLocalAiResponse(userQuery, { mode });
+      // Fallback to local AI engine on any exception
+      const aiData = getLocalAiResponseData(userQuery, { mode });
       return NextResponse.json({
         role: "assistant",
-        content: localResponse,
+        content: aiData.content,
+        suggestedQuestions: aiData.suggestedQuestions,
         sessionId: sessionId ?? "session_fallback",
         mode,
       });
     }
   } catch (error: any) {
     console.error("[chat]", error);
-    // Even on server failure, return an informative AI answer
-    const fallbackResponse = getLocalAiResponse("career guidance");
+    // Even on server failure, return an informative AI answer with suggestions
+    const aiData = getLocalAiResponseData("career guidance");
     return NextResponse.json({
       role: "assistant",
-      content: fallbackResponse,
+      content: aiData.content,
+      suggestedQuestions: aiData.suggestedQuestions,
     });
   }
 }
